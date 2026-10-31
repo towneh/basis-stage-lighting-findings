@@ -1,0 +1,623 @@
+<!DOCTYPE html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>How many stage lights fit in a VR frame, and what do avatars cost?</title>
+<meta name="description" content="Five stage-lighting systems timed at 25, 50 and 100 fixtures at VR resolution in Basis against a 90 Hz frame budget, plus what a Poiyomi Toon crowd and VRC Light Volumes support cost.">
+<meta property="og:title" content="How many stage lights fit in a VR frame, and what do avatars cost?">
+<meta property="og:description" content="Five stage-lighting systems timed at 25, 50 and 100 fixtures at VR resolution in Basis against a 90 Hz frame budget, plus what a Poiyomi Toon crowd and VRC Light Volumes support cost.">
+<meta property="og:type" content="article">
+<meta property="og:url" content="https://towneh.github.io/basis-stage-lighting-findings/">
+<meta property="og:image" content="https://towneh.github.io/basis-stage-lighting-findings/img/vrstagelighting.jpg">
+<meta name="twitter:card" content="summary_large_image">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600&family=Source+Sans+3:wght@400;600&display=swap" rel="stylesheet">
+<style>
+/* Layout: one reading column (~68ch) with figures allowed to run a little wider; stage-plot schematic feel. */
+:root {
+  color-scheme: light;
+  --bg: #f4f3ef;
+  --surface: #fcfcfb;
+  --ink: #14161b;
+  --ink-2: #4f525a;
+  --muted: #7d8089;
+  --line: #e1e0d9;
+  --axis: #c3c2b7;
+  --limit: #c43434;
+  --s-surface: #2a78d6;
+  --s-beams: #eb6834;
+  --s-bodies: #a9a79f;
+  --seg-a: #d9d7cf;
+  --seg-b: #c8c6bd;
+  --seg-vrsl: #14161b;
+  --on-vrsl: #fcfcfb;
+  --seg-r: #ebe9e3;
+  --plan-fill: #eeede8;
+  --font-display: "Barlow Condensed", "Arial Narrow", "Roboto Condensed", sans-serif;
+  --font-body: "Source Sans 3", system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --bg: #101114; --surface: #17191d; --ink: #eeede8; --ink-2: #c3c2b7; --muted: #8a8c93;
+    --line: #2a2c31; --axis: #3d4046; --limit: #e35a5a;
+    --s-surface: #3987e5; --s-beams: #d95926; --s-bodies: #6e6d68;
+    --seg-a: #34363c; --seg-b: #44474e; --seg-vrsl: #eeede8; --on-vrsl: #14161b; --seg-r: #26282d;
+    --plan-fill: #1d2025;
+  }
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --bg: #101114; --surface: #17191d; --ink: #eeede8; --ink-2: #c3c2b7; --muted: #8a8c93;
+  --line: #2a2c31; --axis: #3d4046; --limit: #e35a5a;
+  --s-surface: #3987e5; --s-beams: #d95926; --s-bodies: #6e6d68;
+  --seg-a: #34363c; --seg-b: #44474e; --seg-vrsl: #eeede8; --on-vrsl: #14161b; --seg-r: #26282d;
+  --plan-fill: #1d2025;
+}
+
+* { box-sizing: border-box; }
+html { background: var(--bg); }
+body {
+  margin: 0; background: var(--bg); color: var(--ink);
+  font: 400 1.0625rem/1.6 var(--font-body);
+  -webkit-font-smoothing: antialiased;
+}
+main { max-width: 860px; margin: 0 auto; padding: 48px 20px 72px; display: grid; gap: 56px; }
+header, section { display: grid; gap: 16px; }
+.prose, header p, section > p, section > ul { max-width: 68ch; }
+.kicker { font: 600 0.9rem/1 var(--font-display); letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); margin: 0; }
+h1, h2, h3 { font-family: var(--font-display); font-weight: 600; line-height: 1.05; margin: 0; text-wrap: balance; }
+h1 { font-size: clamp(2.4rem, 6vw, 3.6rem); letter-spacing: -0.01em; }
+h2 { font-size: 1.9rem; }
+h3 { font-size: 1.25rem; letter-spacing: 0.01em; }
+p { margin: 0; }
+.lede { font-size: 1.2rem; color: var(--ink-2); }
+ul { margin: 0; padding-left: 1.2em; display: grid; gap: 8px; }
+a { color: inherit; text-underline-offset: 3px; }
+a:focus-visible, [tabindex]:focus-visible, summary:focus-visible { outline: 2px solid var(--s-surface); outline-offset: 2px; }
+strong { font-weight: 600; }
+
+figure { margin: 0; display: grid; gap: 10px; }
+.chart { background: var(--surface); border-radius: 10px; padding: 18px 18px 10px; box-shadow: 0 0 0 1px var(--line); overflow-x: auto; }
+.chart svg { display: block; width: 100%; height: auto; min-width: 560px; }
+figcaption { font-size: 0.92rem; color: var(--muted); max-width: 68ch; }
+.legend { display: flex; flex-wrap: wrap; gap: 6px 18px; font-size: 0.92rem; color: var(--ink-2); margin: 0 0 8px; padding: 0; list-style: none; }
+.legend li { display: flex; align-items: center; gap: 7px; }
+.key { width: 14px; height: 10px; border-radius: 2px; display: inline-block; }
+.key.limit { height: 2px; background: var(--limit); }
+.key.frame { height: 2px; background: var(--ink); }
+
+svg text { font-family: var(--font-body); fill: var(--ink-2); }
+svg .t-muted { fill: var(--muted); }
+svg .t-ink { fill: var(--ink); }
+svg .t-strong { fill: var(--ink); font-weight: 600; }
+svg .grid { stroke: var(--line); stroke-width: 1; }
+svg .base { stroke: var(--axis); stroke-width: 1; }
+.f-surface { fill: var(--s-surface); } .f-beams { fill: var(--s-beams); } .f-bodies { fill: var(--s-bodies); }
+.hit { cursor: default; }
+.hit:hover rect, .hit:hover path, .hit:focus-visible rect, .hit:focus-visible path { filter: brightness(1.12); }
+
+.test-grid { display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr); gap: 24px; align-items: start; }
+.facts { display: grid; gap: 12px; margin: 0; }
+.facts div { display: grid; gap: 2px; }
+.facts dt { font: 600 0.95rem/1.2 var(--font-display); letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); }
+.facts dd { margin: 0; font-size: 0.98rem; }
+.plan svg { min-width: 0; }
+.plan .room { fill: var(--plan-fill); stroke: var(--axis); stroke-width: 1.5; }
+.plan .zone { fill: var(--surface); stroke: var(--axis); stroke-width: 1; }
+.plan .truss { stroke: var(--ink-2); stroke-width: 2.5; stroke-linecap: round; }
+.plan .slot { fill: var(--s-beams); }
+.plan .person { fill: var(--muted); opacity: 0.55; }
+.plan .cam { fill: var(--ink); }
+.plan .cam-ring { fill: none; stroke: var(--surface); stroke-width: 2; }
+.plan .ray { stroke: var(--ink); stroke-width: 1.5; fill: none; }
+.plan .cone { fill: var(--ink); opacity: 0.08; }
+.plan text { font-size: 12px; }
+.plan .cam-label { font-weight: 600; fill: var(--ink); font-size: 12.5px; }
+
+.systems { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; }
+.sys { display: grid; gap: 6px; margin: 0; }
+.sys img { width: 100%; height: auto; aspect-ratio: 600 / 338; border-radius: 6px; display: block; background: var(--plan-fill); }
+.sys h3 { font-size: 1.1rem; }
+.sys p { font-size: 0.9rem; color: var(--ink-2); line-height: 1.45; }
+
+details { font-size: 0.92rem; color: var(--ink-2); }
+summary { cursor: pointer; color: var(--muted); width: max-content; }
+table { border-collapse: collapse; margin-top: 10px; font-variant-numeric: tabular-nums; }
+th, td { text-align: right; padding: 4px 10px; border-bottom: 1px solid var(--line); }
+th:first-child, td:first-child { text-align: left; padding-left: 0; }
+thead th { color: var(--muted); font-weight: 600; }
+table.data { width: 100%; margin: 0; font-size: 0.95rem; }
+table.data td, table.data th { padding: 8px 10px; }
+table.data td:first-child { color: var(--ink); }
+.method summary { font: 600 1.6rem/1.1 var(--font-display); color: var(--ink); width: auto; }
+.method ul { margin-top: 14px; font-size: 0.95rem; color: var(--ink-2); max-width: 68ch; }
+
+.small { font-size: 0.95rem; color: var(--ink-2); }
+footer { border-top: 1px solid var(--line); padding-top: 18px; font-size: 0.88rem; color: var(--muted); max-width: 68ch; }
+
+#tip {
+  position: fixed; z-index: 10; pointer-events: none; max-width: 260px;
+  background: var(--ink); color: var(--bg); font-size: 0.85rem; line-height: 1.4;
+  padding: 7px 10px; border-radius: 6px; opacity: 0; transition: opacity 80ms;
+}
+#tip.on { opacity: 1; }
+@media (prefers-reduced-motion: reduce) { #tip { transition: none; } }
+
+@media (max-width: 720px) {
+  .test-grid { grid-template-columns: 1fr; }
+  .systems { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width: 420px) {
+  .systems { grid-template-columns: 1fr; }
+  main { gap: 44px; }
+}
+</style>
+</head>
+<body>
+<main>
+
+<header>
+  <p class="kicker">Basis performance test · stage lighting and avatars · October 2026</p>
+  <h1>How many stage lights fit in a VR frame, and what do avatars cost?</h1>
+  <p class="lede">Club and festival worlds in Basis need lighting rigs that hold a steady frame rate in a headset. We built
+  a test venue, lit it five different ways at 25, 50 and 100 fixtures, and timed each at VR resolution, with and
+  without a crowd of 250 avatars. Volumetric beams set the limit. The best we tried, an unreleased VRSL-URP change,
+  fits about ten fixtures in the budget, and the beams that ship today fit seven at most. A crowd of 250 Poiyomi Toon
+  avatars costs more than the whole stage-lighting budget, and a test port of VRC Light Volumes support to Poiyomi's
+  URP shader adds another 3.5–5 ms at its default setting.</p>
+</header>
+
+<section aria-labelledby="h-budget">
+  <h2 id="h-budget">The budget</h2>
+  <p>At 90 Hz a headset gives the GPU 11.1 ms to draw each frame. When a frame takes longer, the VR runtime
+  shows a reprojected copy of the previous frame in its place, so we treat the budget as a hard limit. We set it for a Quest 3 or Valve Frame running
+  over PC on an RTX 3080, and divided the frame between the world, LTCGI (video screens lighting the room), stage
+  lighting and a reserve. Stage lighting gets 3 ms, split between light landing on surfaces, the visible beams and
+  the fixtures themselves.</p>
+  <figure>
+    <div class="chart" id="fig-budget"></div>
+    <figcaption>The 90 Hz frame on the reference PC. The crowd's share is still to be set, using this test's crowd figure.</figcaption>
+  </figure>
+</section>
+
+<section aria-labelledby="h-test">
+  <h2 id="h-test">The test</h2>
+  <p>Our reference is a club world we're porting to Basis, with a 41-fixture VRSL rig driven by DMX and AudioLink.
+  The budget above is what holding 90 Hz there allows.</p>
+  <p>The test venue is generated, but built like an authored world. Walls and floors come in 2–4 m panels, and its 93
+  materials follow the reference club's mix: textured, plain, unlit screens, glass and cutout mesh.</p>
+  <div class="test-grid">
+    <figure class="plan">
+      <div class="chart" id="fig-plan"></div>
+      <figcaption>Plan of the 40 × 30 m hall, 12 m high. Orange dots are fixture positions on the six trusses, grey dots where the 250 avatars stand, arrows the five camera views.</figcaption>
+    </figure>
+    <dl class="facts">
+      <div><dt>Rig</dt><dd>Six trusses at 9 m, filled to 25, 50 or 100 fixtures in the reference club's mix of spot movers, washes and pars, at full white with gobos on the spots.</dd></div>
+      <div><dt>Views</dt><dd>Five fixed cameras. Each approach is judged on its worst view.</dd></div>
+      <div><dt>Crowd</dt><dd>250 copies of one Poiyomi Toon stand-in avatar, or none.</dd></div>
+      <div><dt>Resolution</dt><dd>2560 × 1440 at render scale 1.58, the pixel count of a Quest 3 or Valve Frame.</dd></div>
+      <div><dt>Fair comparison</dt><dd>Every system is set as bright as Unity's spot lights on the stage-front floor, within 1%, and each cost is timed against an unlit control in the same run.</dd></div>
+      <div><dt>Two PCs</dt><dd>Timed on an RTX 3090 as ratios to Unity's spot lights, then the spots alone timed on the reference RTX 3080 to turn every ratio into budget milliseconds.</dd></div>
+    </dl>
+  </div>
+
+  <h3>The lighting systems</h3>
+  <div class="systems">
+    <figure class="sys"><img src="img/urp-spots.jpg" alt="The venue lit by Unity spot lights: lit floor and stage, no beams" width="600" height="338" loading="lazy"><h3>Unity URP spot lights</h3><p>One Unity spot light per fixture, shadows off. The brightness reference. No beams.</p></figure>
+    <figure class="sys"><img src="img/vrsl-urp-shipped.jpg" alt="The venue lit by VRSL-URP as shipped, with hazy volumetric beams" width="600" height="338" loading="lazy"><h3>VRSL-URP as shipped</h3><p>Our URP port of VRSL. One screen-space pass lights every surface, and beams are drawn by stepping through each cone (ray-marching).</p></figure>
+    <figure class="sys"><img src="img/vrsl-urp-improved.jpg" alt="The venue lit by VRSL-URP with the cone cull and four-segment beams" width="600" height="338" loading="lazy"><h3>VRSL-URP improved</h3><p>Two unreleased changes. Each screen tile skips lights whose cone can't reach it, and beams are calculated in four segments instead of stepped.</p></figure>
+    <figure class="sys"><img src="img/vrstagelighting.jpg" alt="The venue lit by VRStageLighting, with mesh cone beams" width="600" height="338" loading="lazy"><h3>VRStageLighting</h3><p>AcChosen's VRStageLighting 2.8.1, the original VRSL. Beams are cone meshes, and projector meshes brighten the surfaces they hit.</p></figure>
+    <figure class="sys"><img src="img/vrstagelighting-gi.jpg" alt="The venue lit by the VRStageLighting-GI stand-in" width="600" height="338" loading="lazy"><h3>VRStageLighting-GI</h3><p>VRStageLighting's beams, with surfaces lit by a loop over every light inside each material. A stand-in built to cost what the GI package's loop costs.</p></figure>
+    <figure class="sys"><img src="img/light-volumes.jpg" alt="The venue lit by VRC Light Volumes with VRStageLighting's beams" width="600" height="338" loading="lazy"><h3>VRC Light Volumes</h3><p>REDSIM's light volumes, read by every material, with each gobo as a light cookie. Beams from VRStageLighting.</p></figure>
+  </div>
+  <p class="small">Five systems, with VRSL-URP in two versions. Front-of-house view at 100 fixtures, brightness matched.</p>
+</section>
+
+<section aria-labelledby="h-cost">
+  <h2 id="h-cost">What the rig costs</h2>
+  <p>Double the fixtures and most systems roughly double their cost. Unity's spot lights nearly triple, as each
+  pixel's list of lights fills up. On the stage view at 100 fixtures, beams are the larger part of every system that
+  has them, and the cheapest full system needs 15.7 ms. That's about five times the stage-lighting budget, and more than
+  the whole 11.1 ms frame. A 100-fixture show is over budget with every system tested; we keep it in the test to
+  show how costs grow.</p>
+  <figure>
+    <div class="chart">
+      <ul class="legend">
+        <li><span class="key f-surface" style="background:var(--s-surface)"></span>Light on surfaces</li>
+        <li><span class="key" style="background:var(--s-beams)"></span>Beams and fixture bodies</li>
+      </ul>
+      <div id="fig-cost"></div>
+    </div>
+    <figcaption>GPU time on the stage view at Quest 3 pixels, no avatars. Unity's spot lights were measured on the RTX 3080; the rest are RTX 3090 timings scaled to it. Hover a bar for its parts.</figcaption>
+    <details>
+      <summary>Show the numbers</summary>
+      <table id="tbl-cost"></table>
+    </details>
+  </figure>
+</section>
+
+<section aria-labelledby="h-fit">
+  <h2 id="h-fit">How many fixtures fit</h2>
+  <p>Each bar is the largest rig an approach can carry inside its share of the 3 ms, on its worst view. Below 25
+  fixtures we extrapolated two ways, and where they disagree the bar shows a range. A full system can only be as big
+  as its tightest share allows, and in every system with beams that's the beams.</p>
+  <figure>
+    <div class="chart">
+      <ul class="legend">
+        <li><span class="key" style="background:var(--s-surface)"></span>Surface light, 1.5 ms share</li>
+        <li><span class="key" style="background:var(--s-beams)"></span>Beams, 1.0 ms share</li>
+        <li><span class="key" style="background:var(--muted);opacity:.45"></span>Paler end: the two estimates disagree</li>
+      </ul>
+      <div id="fig-fit"></div>
+    </div>
+    <figcaption>Largest fixture count within the share on the approach's worst view, at Quest 3 pixels on the RTX 3080, converted as in the chart above.</figcaption>
+    <details>
+      <summary>Show the numbers</summary>
+      <table id="tbl-fit"></table>
+    </details>
+  </figure>
+</section>
+
+<section aria-labelledby="h-mean">
+  <h2 id="h-mean">For world builders</h2>
+  <p>Give volumetric beams only to the fixtures that need them. Beams are what limit every rig here, and their cost
+  follows the number of beams. A rig where only some fixtures throw beams should carry more fixtures in total, though
+  we haven't timed one.</p>
+</section>
+
+<section aria-labelledby="h-avatars">
+  <h2 id="h-avatars">For avatar authors</h2>
+  <p>Avatars draw in the same frame as the stage lighting. Our stand-in is a Poiyomi Toon URP avatar with 67,344
+  triangles, 7 materials, 204 bones and 59.1 MB of texture memory. With no stage lighting, a crowd of 250 costs
+  5.9–9.4 ms on the views that see it, about 0.02–0.04 ms per avatar. That's more than stage lighting's whole 3 ms
+  budget. The frame budget at the top doesn't have a line for avatars yet, and a crowd this size wouldn't fit beside
+  it. Our avatars stand still with no far LOD, and a real crowd would cost less.</p>
+  <ul>
+    <li>Under URP, Poiyomi takes light from Unity's spot lights, VRSL-URP and VRStageLighting. Unity's spot lights
+    only reached it with Realistic lighting, pixel lights on and brightness limits off; we didn't test which of those
+    matters.</li>
+    <li>VRC Light Volumes doesn't reach Poiyomi avatars in URP yet. Poiyomi 10.0.28 has its Light Volumes code only in
+    the Built-in pipeline passes.</li>
+  </ul>
+  <p>To estimate what URP support would cost, we copied that code into Poiyomi's URP passes in a local test build,
+  not a Poiyomi release, and timed 250 copies against the stock shader under VRC Light Volumes. The lighting tests
+  above used the same port to light the crowd.</p>
+  <figure>
+    <div class="chart">
+      <table class="data">
+        <thead><tr><th>VRC Light Volumes setting</th><th>Extra for 250 avatars</th><th>Extra per avatar</th></tr></thead>
+        <tbody>
+          <tr><td>Default, up to 4 lights a pixel</td><td>3.5–5.1 ms</td><td>0.014–0.020 ms</td></tr>
+          <tr><td>Uncapped</td><td>6.4–15.9 ms</td><td>0.026–0.064 ms</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <figcaption>The port against stock Poiyomi, with VRC Light Volumes lighting the room, on the four views that see the crowd. RTX 3080 at Quest 3 pixels.</figcaption>
+  </figure>
+  <p>At the default setting, most of the extra cost stays even with every light off. It comes from the ported code,
+  not the lighting. Uncapped, the lighting adds more on top.</p>
+</section>
+
+<section aria-labelledby="h-limits">
+  <h2 id="h-limits">Limits of the test</h2>
+  <ul class="small">
+    <li>The reference RTX 3080 ran at its 83 °C limit throughout. A cooler card would fit about one to six more fixtures per approach, and 18 more for VRC Light Volumes at its cap.</li>
+    <li>Only Unity's spot lights were timed on the RTX 3080; the others are RTX 3090 timings scaled to it. Scaling by the 3080's figure at each rig size instead gives lower counts below 50 fixtures: 11–17 for projector meshes, 23–24 for VRC Light Volumes.</li>
+    <li>Timed on a flat screen with a headset's pixel count, from one view, not in stereo. A run in a headset is still to come.</li>
+    <li>No system cast shadows from geometry. Unity's spot lights ran with shadows off, and the other systems have none to turn on. A shadowed Unity light renders the scene into a shadow map every frame, and switching that on across a rig would cost far more; we didn't time it.</li>
+    <li>VRStageLighting and VRC Light Volumes ran on fixed values, not live DMX.</li>
+  </ul>
+</section>
+
+<section aria-label="How we measured">
+  <details class="method">
+    <summary>How we measured</summary>
+    <ul>
+      <li>A Windows release build of Basis from Unity 6000.7.0b6, using URP's Forward+ renderer, Direct3D 11 and MSAA 2.
+      A test driver switches between states, places the camera at the five fixed views, freezes time and holds every
+      fixture at full white, VRSL-URP through a held DMX signal and the others on fixed values.</li>
+      <li>GPU time comes from Unity's <code>FrameTimingManager</code>. Each state is timed in blocks of 150 frames,
+      keeping each block's median, in forward then reverse order to cancel slow drift, over three passes. A warm-up
+      run before each set is thrown away.</li>
+      <li>A cost is a state's median minus the median of an unlit control in the same run, view by view. Each run also
+      times a null twin, a state that draws exactly the same as another; the gap between them shows the run's noise,
+      0.01–0.08 ms here.</li>
+      <li>Before timing, each system was matched to Unity's spot lights within 1%, by the light it adds to the
+      stage-front floor.</li>
+      <li>Each view's RTX 3080 to RTX 3090 factor for Unity's spot lights at 100 fixtures, 1.40–1.50, turns the other
+      systems' RTX 3090 timings into RTX 3080 milliseconds.</li>
+      <li>The GPU clock is logged beside every run, because cost moves with it. Four RTX 3090 runs reached its
+      temperature limit and were timed again from a cool card, with clocks within 10% of the reference run's.</li>
+      <li>For fixture counts, each view's cost is joined in straight lines through 25, 50 and 100 fixtures, and the
+      count is the largest where the dearest view still fits the share. Below 25 fixtures two extrapolations bound it:
+      a line from zero, and the 25–50 line carried back, which keeps any fixed cost.</li>
+      <li>The avatar figures come from runs alternating the stock and ported avatar builds, timing VRC Light Volumes'
+      lights on and off, with and without the crowd. The measure is the crowd's cost with the lights on. The session's
+      first two crowd runs read high for a reason we haven't found and are left out; the rest agree within 0.7 ms.</li>
+    </ul>
+  </details>
+</section>
+
+<section aria-labelledby="h-conclusion">
+  <h2 id="h-conclusion">Conclusion</h2>
+  <p>No system we tested carries a 100-fixture show inside the budget, Unity's own lights included, and we've
+  accepted that gap.</p>
+  <p>For light on surfaces, Unity's URP spot lights with shadows off are the cheapest option tested, fitting 45
+  fixtures, though without gobos. Poiyomi avatars pick them up without a shader patch, given the material settings above. Their cost
+  grows faster than the rig, and a gobo as a light cookie makes each one about three times dearer. The alternatives
+  each come with a trade-off.</p>
+  <ul>
+    <li>VRC Light Volumes puts a gobo on every light for 1–1.8 times the cost of a plain spot at 100 fixtures, and
+    fits 31 fixtures. Lighting avatars needs the shader support above, 3.5–5 ms per 250 Poiyomi avatars at the
+    default setting.</li>
+    <li>VRStageLighting's projector meshes fit 24 fixtures, but brighten unlit LED screens, which should stay as the
+    artist made them.</li>
+    <li>VRSL-URP's surface pass fits 10–13 even with the unreleased cone cull, and also lights unlit screens. As
+    shipped, its surface pass fits 7–10, and the full system with beams costs two and a half to three times the next dearest.</li>
+    <li>The VRStageLighting-GI stand-in fits 12 and has no gobos on surfaces. It only replaces world materials, and
+    its avatar cost is unknown.</li>
+  </ul>
+  <p>No beam technique fits its 1 ms share beyond ten fixtures. VRSL-URP's unreleased four-segment beams reach ten,
+  VRStageLighting's mesh cones seven at most, and VRSL-URP's shipped ray-marching three. The reference club's 41-fixture rig
+  would need beams about four times cheaper than the best here, and Unity's lights have no beams to offer.</p>
+  <p>On cost, shadowless Unity spot lights are the strongest choice for surfaces, unless surface gobos turn out to be
+  needed.
+  Beams still need a technique we haven't found.</p>
+  <p>All of this is desktop only for now, Unity's spot lights included. A Quest 3's GPU has a small fraction of an
+  RTX 3080's power, and Quest's renderer lights each object with only a handful of lights. We don't recommend any of
+  these systems for standalone worlds until they're measured there. Next come a cheaper beam technique, a Quest
+  measurement, and the look and feature requirements that decide whether surface gobos are needed.</p>
+</section>
+
+<footer>Measured 30 and 31 October 2026 in Basis on Unity 6000.7.0b6 (URP, Direct3D 11). Reference PC: RTX 3080.
+Measuring PC: RTX 3090.</footer>
+
+</main>
+<div id="tip" role="status" aria-live="polite"></div>
+
+<script>
+(() => {
+  const NS = "http://www.w3.org/2000/svg";
+  const el = (tag, attrs = {}, parent) => {
+    const n = document.createElementNS(NS, tag);
+    for (const [k, v] of Object.entries(attrs)) n.setAttribute(k, v);
+    if (parent) parent.appendChild(n);
+    return n;
+  };
+  const txt = (parent, x, y, s, attrs = {}) => { const t = el("text", { x, y, ...attrs }, parent); t.textContent = s; return t; };
+  const svg = (w, h, label) => el("svg", { viewBox: `0 0 ${w} ${h}`, role: "img", "aria-label": label });
+  // Bar with a 4px rounded data end on the right, square at the left.
+  const bar = (p, x, y, w, h, cls, rounded) => {
+    if (w <= 0) return null;
+    if (!rounded || w < 5) return el("rect", { x, y, width: w, height: h, class: cls }, p);
+    const r = 4;
+    return el("path", { class: cls, d: `M${x},${y}H${x + w - r}Q${x + w},${y} ${x + w},${y + r}V${y + h - r}Q${x + w},${y + h} ${x + w - r},${y + h}H${x}Z` }, p);
+  };
+
+  // Tooltip
+  const tip = document.getElementById("tip");
+  const showTip = (e, s) => {
+    tip.textContent = s; tip.classList.add("on");
+    const r = e.target.getBoundingClientRect ? e.target.getBoundingClientRect() : null;
+    const x = e.clientX ?? (r ? r.left + r.width / 2 : 0), y = e.clientY ?? (r ? r.top : 0);
+    const tw = tip.offsetWidth, th = tip.offsetHeight;
+    tip.style.left = Math.min(window.innerWidth - tw - 8, Math.max(8, x + 12)) + "px";
+    tip.style.top = Math.max(8, y - th - 12) + "px";
+  };
+  const hideTip = () => tip.classList.remove("on");
+  const hoverable = (g, s) => {
+    g.setAttribute("class", "hit"); g.setAttribute("tabindex", "0"); g.setAttribute("aria-label", s);
+    g.addEventListener("pointermove", e => showTip(e, s));
+    g.addEventListener("pointerleave", hideTip);
+    g.addEventListener("focus", e => { const r = g.getBoundingClientRect(); showTip({ clientX: r.left + r.width / 2, clientY: r.top, target: g }, s); });
+    g.addEventListener("blur", hideTip);
+  };
+  const ms = v => v.toFixed(1);
+
+  // ── Figure 1: the frame budget ──────────────────────────────────────────────
+  {
+    const W = 760, s = svg(W, 168, "The 11.1 ms frame: world content 4 ms, LTCGI 3 ms, stage lighting 3 ms, reserve 1 ms. Stage lighting splits into surfaces 1.5 ms, beams 1.0 ms, bodies and flares 0.5 ms.");
+    const k = W / 11.1, H = 38, gap = 2;
+    const top = [
+      ["World content", 4, "var(--seg-a)", "t-ink"],
+      ["LTCGI screen light", 3, "var(--seg-b)", "t-ink"],
+      ["Stage lighting", 3, "var(--seg-vrsl)", null],
+      ["Reserve", 1.1, "var(--seg-r)", "t-ink"],
+    ];
+    let x = 0, vx0 = 0, vx1 = 0;
+    top.forEach(([name, v, fill, tc], i) => {
+      const w = v * k - (i < top.length - 1 ? gap : 0);
+      el("rect", { x, y: 22, width: w, height: H, rx: 4, fill }, s);
+      const label = name === "Reserve" ? "1 ms" : `${name} ${v} ms`;
+      const t = txt(s, x + 10, 22 + H / 2 + 5, label, { "font-size": 14, "font-weight": 600 });
+      if (tc) t.setAttribute("class", tc); else t.setAttribute("style", "fill:var(--on-vrsl)");
+      if (name.startsWith("Stage")) { vx0 = x; vx1 = x + w; }
+      x += v * k;
+    });
+    txt(s, 0, 14, "11.1 ms per frame at 90 Hz", { "font-size": 13, class: "t-muted" });
+    txt(s, W, 14, "Reserve", { "font-size": 13, class: "t-muted", "text-anchor": "end" });
+    // zoom lines to the stage-lighting split
+    const y2 = 112;
+    el("path", { d: `M${vx0},${22 + H} L0,${y2}`, class: "base", fill: "none" }, s);
+    el("path", { d: `M${vx1},${22 + H} L${W},${y2}`, class: "base", fill: "none" }, s);
+    const sub = [["Light on surfaces", 1.5, "f-surface"], ["Beams", 1.0, "f-beams"], ["Bodies", 0.5, "f-bodies"]];
+    const k2 = W / 3; x = 0;
+    sub.forEach(([name, v, cls], i) => {
+      const w = v * k2 - (i < sub.length - 1 ? gap : 0);
+      el("rect", { x, y: y2, width: w, height: H, rx: 4, class: cls }, s);
+      txt(s, x + 10, y2 + H / 2 + 5, `${name} ${v} ms`, { "font-size": 14, "font-weight": 600, style: `fill:${i === 2 ? "var(--ink)" : "#fff"}` });
+      x += v * k2;
+    });
+    document.getElementById("fig-budget").appendChild(s);
+  }
+
+  // ── Figure 2: venue plan ────────────────────────────────────────────────────
+  {
+    const S = 11.5, ox = 14, oy = 14;
+    const X = x => ox + (x + 20) * S, Y = z => oy + (z + 15) * S;
+    const s = svg(ox * 2 + 40 * S, oy * 2 + 30 * S, "Plan of the venue: stage at the top, trusses over the stage, front of house and both sides, crowd on the floor, balcony on the right, bar at the back, and five camera positions.");
+    el("rect", { x: X(-20), y: Y(-15), width: 40 * S, height: 30 * S, rx: 3, class: "room" }, s);
+    el("rect", { x: X(-12), y: Y(-15), width: 24 * S, height: 8 * S, class: "zone" }, s);
+    txt(s, X(-11.4), Y(-14) + 4, "Stage, 1.2 m, LED wall", { class: "t-muted" });
+    el("rect", { x: X(16), y: Y(-5), width: 4 * S, height: 20 * S, class: "zone" }, s);
+    const bl = txt(s, 0, 0, "Balcony, 4.5 m", { class: "t-muted", transform: `translate(${X(18.6)},${Y(-4)}) rotate(90)` });
+    el("rect", { x: X(-10), y: Y(12), width: 20 * S, height: 3 * S, class: "zone" }, s);
+    txt(s, X(-9.4), Y(14) + 2, "Bar", { class: "t-muted" });
+    // crowd: deterministic scatter
+    let seed = 7; const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+    for (let i = 0; i < 200; i++) el("circle", { cx: X(-14 + rnd() * 28), cy: Y(-4.6 + rnd() * 10), r: 1.4, class: "person" }, s);
+    for (let i = 0; i < 50; i++) el("circle", { cx: X(16.4 + rnd() * 3.2), cy: Y(-4.6 + rnd() * 19), r: 1.6, class: "person" }, s);
+    txt(s, X(-11), Y(5.5) + 14, "Crowd", { class: "t-muted" });
+    // trusses with fixture slots
+    const lines = [[-12, -13, 12, -13, 16], [-12, -10, 12, -10, 16], [-12, -7.5, 12, -7.5, 16], [-12, 3, 12, 3, 16], [-13, -5, -13, 11, 18], [13, -5, 13, 11, 18]];
+    lines.forEach(([x0, z0, x1, z1, n]) => {
+      el("line", { x1: X(x0), y1: Y(z0), x2: X(x1), y2: Y(z1), class: "truss" }, s);
+      for (let i = 0; i < n; i++) {
+        const t = (i + 0.5) / n;
+        el("circle", { cx: X(x0 + (x1 - x0) * t), cy: Y(z0 + (z1 - z0) * t), r: 2.2, class: "slot" }, s);
+      }
+    });
+    txt(s, X(-12), Y(3) - 7, "Front-of-house truss, 9 m", { class: "t-muted" });
+    // cameras: position, look target (plan), label, label offset
+    const cams = [
+      ["foh", 0, 8, 0, -12, 10, 4],
+      ["stage", 0, -8.6, 0, 10, 10, 12],
+      ["balcony", 18.5, 6, -4, -6, -58, 16],
+      ["floor-up (looks up into the rig)", 0, -2, 0, -9, 10, 4],
+      ["back", 0, 11, 0, -15, 10, 4],
+    ];
+    cams.forEach(([name, x, z, tx, tz, lx, ly]) => {
+      const dx = tx - x, dz = tz - z, L = Math.hypot(dx, dz), ux = dx / L, uz = dz / L, len = 3.2;
+      const ex = x + ux * len, ez = z + uz * len, px = -uz * 1.1, pz = ux * 1.1;
+      el("path", { d: `M${X(x)},${Y(z)} L${X(ex + px)},${Y(ez + pz)} L${X(ex - px)},${Y(ez - pz)} Z`, class: "cone" }, s);
+      el("line", { x1: X(x), y1: Y(z), x2: X(ex), y2: Y(ez), class: "ray" }, s);
+      el("path", { d: `M${X(ex)},${Y(ez)} l${(-ux * 6 + -uz * 4).toFixed(2)},${(-uz * 6 + ux * 4).toFixed(2)} M${X(ex)},${Y(ez)} l${(-ux * 6 + uz * 4).toFixed(2)},${(-uz * 6 - ux * 4).toFixed(2)}`, class: "ray" }, s);
+      el("circle", { cx: X(x), cy: Y(z), r: 6, class: "cam-ring" }, s);
+      el("circle", { cx: X(x), cy: Y(z), r: 4.5, class: "cam" }, s);
+      txt(s, X(x) + lx, Y(z) + ly, name, { class: "cam-label" });
+    });
+    document.getElementById("fig-plan").appendChild(s);
+  }
+
+  // ── Figure 3: cost by fixture count ─────────────────────────────────────────
+  const COST = [
+    ["Unity URP spot lights", [0.63, 1.70, 4.87], [0, 0, 0]],
+    ["VRStageLighting", [1.13, 2.24, 4.68], [2.63, 5.31, 10.97]],
+    ["VRC Light Volumes", [1.06, 2.12, 5.27], [2.46, 5.09, 10.79]],
+    ["VRStageLighting-GI", [2.06, 4.12, 8.30], [2.46, 5.16, 10.81]],
+    ["VRSL-URP improved", [2.71, 4.76, 8.87], [2.52, 5.58, 10.96]],
+    ["VRSL-URP as shipped", [3.36, 6.16, 11.58], [6.88, 18.29, 36.34]],
+  ];
+  const COUNTS = [25, 50, 100];
+  {
+    const W = 760, L = 178, R = 650, MAX = 25, k = (R - L) / MAX;
+    const bh = 12, bg = 4, sg = 20, top = 34;
+    const block = 3 * bh + 2 * bg;
+    const H = top + COST.length * block + (COST.length - 1) * sg + 34;
+    const s = svg(W, H, "Stage lighting cost on the stage view at 25, 50 and 100 fixtures for five systems (VRSL-URP in two versions), against the 3 ms budget and the 11.1 ms frame.");
+    const plotB = H - 26;
+    for (let v = 0; v <= MAX; v += 5) {
+      el("line", { x1: L + v * k, y1: top - 6, x2: L + v * k, y2: plotB, class: v === 0 ? "base" : "grid" }, s);
+      txt(s, L + v * k, plotB + 18, `${v} ms`, { "text-anchor": "middle", "font-size": 12, class: "t-muted" });
+    }
+    COST.forEach(([name, surf, beams], i) => {
+      const y0 = top + i * (block + sg);
+      txt(s, 0, y0 + block / 2 + 5, name, { "font-size": 14, class: "t-strong" });
+      COUNTS.forEach((n, j) => {
+        const y = y0 + j * (bh + bg), tot = surf[j] + beams[j];
+        txt(s, L - 10, y + bh - 2, String(n), { "text-anchor": "end", "font-size": 11.5, class: "t-muted" });
+        const g = el("g", {}, s);
+        const ws = Math.min(surf[j], MAX) * k;
+        const broken = tot > MAX;
+        const wb = Math.max(0, Math.min(tot, MAX) * k - ws - (beams[j] > 0 ? 2 : 0));
+        bar(g, L, y, ws - (beams[j] > 0 ? 0 : 0), bh, "f-surface", beams[j] === 0);
+        if (beams[j] > 0) bar(g, L + ws + 2, y, wb, bh, "f-beams", !broken);
+        if (broken) {
+          const bx = R - 14;
+          el("path", { d: `M${bx},${y - 2} l5,${bh + 4} M${bx + 5},${y - 2} l5,${bh + 4}`, stroke: "var(--surface)", "stroke-width": 3 }, g);
+        }
+        el("rect", { x: L, y: y - 2, width: Math.min(tot, MAX) * k + 2, height: bh + 4, fill: "transparent" }, g);
+        hoverable(g, `${name}, ${n} fixtures: ${ms(tot)} ms (surfaces ${ms(surf[j])}, beams and bodies ${ms(beams[j])})`);
+        if (n === 100 || broken) {
+          txt(s, L + Math.min(tot, MAX) * k + 6, y + bh - 2, `${ms(tot)} ms`, { "font-size": 12, class: n === 100 ? "t-ink" : "t-muted" });
+        }
+      });
+    });
+    // reference lines
+    const ref = (v, color, label, ly) => {
+      el("line", { x1: L + v * k, y1: top - 10, x2: L + v * k, y2: plotB, stroke: color, "stroke-width": 2 }, s);
+      txt(s, L + v * k + 5, ly, label, { "font-size": 12.5, style: `fill:${color};font-weight:600` });
+    };
+    ref(3, "var(--limit)", "Budget 3 ms", 16);
+    ref(11.1, "var(--ink)", "Whole frame 11.1 ms", 16);
+    document.getElementById("fig-cost").appendChild(s);
+
+    const t = document.getElementById("tbl-cost");
+    t.innerHTML = `<thead><tr><th>System</th><th>Fixtures</th><th>Surfaces, ms</th><th>Beams and bodies, ms</th><th>Total, ms</th></tr></thead><tbody>` +
+      COST.flatMap(([n, a, b]) => COUNTS.map((c, j) => `<tr><td>${j ? "" : n}</td><td>${c}</td><td>${a[j].toFixed(2)}</td><td>${b[j].toFixed(2)}</td><td>${(a[j] + b[j]).toFixed(2)}</td></tr>`)).join("") + `</tbody>`;
+  }
+
+  // ── Figure 4: fixture counts ────────────────────────────────────────────────
+  const FIT = [
+    ["Surface light", "f-surface", [
+      ["Unity URP spot lights", 45, 45, "stage"],
+      ["VRC Light Volumes, capped at 4 lights a pixel", 42, 42, "back", "gives a third of the light"],
+      ["VRC Light Volumes", 31, 31, "front of house"],
+      ["Unity URP spots with a gobo cookie", 25, 25, "stage"],
+      ["Projector meshes (VRStageLighting)", 24, 24, "back"],
+      ["Light loop (VRStageLighting-GI)", 12, 12, "balcony"],
+      ["VRSL-URP, cone cull", 10, 13, "stage"],
+      ["VRSL-URP as shipped", 7, 10, "back"],
+    ]],
+    ["Beams", "f-beams", [
+      ["Four-segment beams (VRSL-URP improved)", 10, 10, "stage"],
+      ["Mesh cone beams (VRStageLighting)", 1, 7, "floor-up", "also used with VRStageLighting-GI and VRC Light Volumes"],
+      ["Ray-marched beams (VRSL-URP as shipped)", 3, 3, "floor-up"],
+    ]],
+  ];
+  {
+    const W = 760, L = 300, R = 712, MAX = 50, k = (R - L) / MAX, bh = 14, rg = 10, gh = 30, top = 26;
+    const rows = FIT.reduce((a, g) => a + g[2].length, 0);
+    const H = top + FIT.length * gh + rows * (bh + rg) + 30;
+    const s = svg(W, H, "Largest fixture count each approach fits within its share, surface light and beams, with the reference club's 41 fixtures marked.");
+    const plotB = H - 26;
+    for (let v = 0; v <= MAX; v += 10) {
+      el("line", { x1: L + v * k, y1: top - 6, x2: L + v * k, y2: plotB, class: v === 0 ? "base" : "grid" }, s);
+      txt(s, L + v * k, plotB + 18, String(v), { "text-anchor": "middle", "font-size": 12, class: "t-muted" });
+    }
+    txt(s, R, plotB + 18, "", {});
+    let y = top;
+    FIT.forEach(([gname, cls, items]) => {
+      txt(s, 0, y + 18, `${gname} · ${cls === "f-surface" ? "1.5" : "1.0"} ms share`, { "font-size": 13, class: "t-muted", style: "letter-spacing:.06em;text-transform:uppercase;font-weight:600" });
+      y += gh;
+      items.forEach(([name, lo, hi, view, note]) => {
+        txt(s, 0, y + bh - 2, name, { "font-size": 13.5, class: "t-ink" });
+        const g = el("g", {}, s);
+        bar(g, L, y, lo * k, bh, cls, hi === lo);
+        if (hi > lo) {
+          const b = bar(g, L + lo * k + 2, y, (hi - lo) * k - 2, bh, cls, true);
+          if (b) b.setAttribute("opacity", "0.35");
+        }
+        el("rect", { x: L, y: y - 3, width: hi * k + 4, height: bh + 6, fill: "transparent" }, g);
+        const range = hi > lo ? `${lo}–${hi}` : `${lo}`;
+        hoverable(g, `${name}: ${range} fixtures, limited by the ${view} view${note ? "; " + note : ""}`);
+        txt(s, L + hi * k + 6, y + bh - 2, range, { "font-size": 12.5, class: "t-ink", "font-weight": 600 });
+        y += bh + rg;
+      });
+    });
+    const cx = L + 41 * k;
+    el("line", { x1: cx, y1: top - 8, x2: cx, y2: plotB, stroke: "var(--ink-2)", "stroke-width": 1.5 }, s);
+    txt(s, cx - 6, top - 12, "Reference club rig, 41", { "font-size": 12, "text-anchor": "end", class: "t-ink", "font-weight": 600 });
+    document.getElementById("fig-fit").appendChild(s);
+
+    const t = document.getElementById("tbl-fit");
+    t.innerHTML = `<thead><tr><th>Approach</th><th>Share</th><th>Fixtures that fit</th><th>Limiting view</th></tr></thead><tbody>` +
+      FIT.flatMap(([g, c, items]) => items.map(([n, lo, hi, v]) => `<tr><td>${n}</td><td>${g === "Beams" ? "1.0" : "1.5"} ms</td><td>${hi > lo ? lo + "–" + hi : lo}</td><td>${v}</td></tr>`)).join("") + `</tbody>`;
+  }
+})();
+</script>
+</body>
+</html>
